@@ -23,7 +23,6 @@ class WeatherService {
     }
   }
 
-  // SỬA HÀM NÀY: Không lọc "12:00:00" nữa, lấy hết về để phân tích
   Future<List<WeatherModel>> getForecast({double? lat, double? lon}) async {
     Position? position;
     if (lat == null || lon == null) position = await _determinePosition();
@@ -37,14 +36,20 @@ class WeatherService {
       final data = jsonDecode(response.body);
       final List<dynamic> list = data['list'];
 
-      // Map thẳng JSON sang Model, không lọc gì cả
+      // SỬA Ở ĐÂY: Map đầy đủ thông tin bao gồm cả GIÓ (wind)
       return list.map((item) => WeatherModel(
         cityName: '',
         temperature: (item['main']['temp'] as num).toDouble(),
         mainCondition: item['weather'][0]['main'],
         iconCode: item['weather'][0]['icon'],
         time: item['dt_txt'],
-        humidity: item['main']['humidity'], // Thêm độ ẩm
+        humidity: item['main']['humidity'],
+
+        // --- THÊM 2 DÒNG NÀY ĐỂ HẾT LỖI ---
+        windSpeed: (item['wind']['speed'] as num).toDouble(),
+        windDeg: item['wind']['deg'] ?? 0,
+        // ---------------------------------
+
       )).toList();
     } else {
       throw Exception('Lỗi tải dự báo');
