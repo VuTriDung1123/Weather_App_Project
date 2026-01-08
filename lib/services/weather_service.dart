@@ -4,14 +4,24 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../models/weather_model.dart';
 
+
 class WeatherService {
-  // Đừng quên thay API KEY của bạn vào đây nhé!
   String apiKey = dotenv.env['WEATHER_API_KEY'] ?? '';
 
-  // Lấy thời tiết hiện tại
-  Future<WeatherModel> getWeather() async {
-    Position position = await _determinePosition();
-    final url = 'https://api.openweathermap.org/data/2.5/weather?lat=${position.latitude}&lon=${position.longitude}&appid=$apiKey&units=metric';
+  // 1. Sửa hàm này: Cho phép truyền lat, lon vào (nullable)
+  Future<WeatherModel> getWeather({double? lat, double? lon}) async {
+    Position? position;
+
+    // Nếu không truyền toạ độ -> Lấy GPS hiện tại
+    if (lat == null || lon == null) {
+      position = await _determinePosition();
+    }
+
+    // Dùng toạ độ truyền vào HOẶC toạ độ GPS
+    final latitude = lat ?? position!.latitude;
+    final longitude = lon ?? position!.longitude;
+
+    final url = 'https://api.openweathermap.org/data/2.5/weather?lat=$latitude&lon=$longitude&appid=$apiKey&units=metric';
 
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
@@ -19,31 +29,35 @@ class WeatherService {
     } else {
       throw Exception('Lỗi tải thời tiết hiện tại');
     }
-
   }
 
-  // MỚI: Lấy dự báo 5 ngày (API trả về mỗi 3 giờ 1 lần -> Ta sẽ lọc lấy 1 cái mỗi ngày)
-  Future<List<WeatherModel>> getForecast() async {
-    Position position = await _determinePosition();
-    final url = 'https://api.openweathermap.org/data/2.5/forecast?lat=${position.latitude}&lon=${position.longitude}&appid=$apiKey&units=metric';
+  // 2. Sửa hàm này tương tự
+  Future<List<WeatherModel>> getForecast({double? lat, double? lon}) async {
+    Position? position;
+
+    if (lat == null || lon == null) {
+      position = await _determinePosition();
+    }
+
+    final latitude = lat ?? position!.latitude;
+    final longitude = lon ?? position!.longitude;
+
+    final url = 'https://api.openweathermap.org/data/2.5/forecast?lat=$latitude&lon=$longitude&appid=$apiKey&units=metric';
 
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final List<dynamic> list = data['list'];
-
-      // Lọc dữ liệu: Chỉ lấy các mốc giờ 12:00 trưa mỗi ngày để hiển thị cho gọn
-      // (Vì API miễn phí trả về 40 điểm dữ liệu, ta không cần hết)
       List<WeatherModel> forecastList = [];
       for (var item in list) {
-        String dateText = item['dt_txt']; // Dạng "2026-01-08 12:00:00"
+        String dateText = item['dt_txt'];
         if (dateText.contains("12:00:00")) {
           forecastList.add(WeatherModel(
-            cityName: '', // Không cần tên phố cho forecast
+            cityName: '',
             temperature: (item['main']['temp'] as num).toDouble(),
             mainCondition: item['weather'][0]['main'],
             iconCode: item['weather'][0]['icon'],
-            time: dateText, // Lưu thêm thời gian để hiển thị thứ/ngày
+            time: dateText,
           ));
         }
       }
@@ -53,7 +67,7 @@ class WeatherService {
     }
   }
 
-  // Giữ nguyên hàm xin quyền GPS cũ
+  // Hàm GPS giữ nguyên
   Future<Position> _determinePosition() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return Future.error('Location services are disabled.');
