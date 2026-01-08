@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
+import 'package:latlong2/latlong.dart'; // Import thêm cái này để nhận kiểu dữ liệu
+import 'map_screen.dart'; // Import màn hình bản đồ mới tạo
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,15 +29,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({double? lat, double? lon}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
     try {
-      final current = await _weatherService.getWeather();
-      final forecast = await _weatherService.getForecast();
+      // Truyền lat, lon vào service (nếu null service sẽ tự lấy GPS)
+      final current = await _weatherService.getWeather(lat: lat, lon: lon);
+      final forecast = await _weatherService.getForecast(lat: lat, lon: lon);
 
       final currentWithTime = WeatherModel(
         cityName: current.cityName,
@@ -48,11 +51,14 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _allDays = [currentWithTime, ...forecast];
         _isLoading = false;
+        // Reset về view mặc định sau khi load xong nơi mới
+        _showForecastView = false;
+        _currentIndex = 0;
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = "Lỗi kết nối hoặc API Key.\nHãy thử lại.";
+        _errorMessage = "Không tải được dữ liệu.\nLỗi: $e";
       });
     }
   }
@@ -143,10 +149,33 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 4),
-            Text(cityName, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+            // Giới hạn độ dài tên thành phố để không bị tràn
+            SizedBox(
+              width: 200,
+              child: Text(
+                cityName,
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        IconButton(onPressed: () {}, icon: const Icon(Icons.settings, color: Colors.white))
+        // Nút Bản Đồ (Thay cho icon Menu cũ)
+        IconButton(
+          onPressed: () async {
+            // Mở màn hình bản đồ và ĐỢI kết quả trả về
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MapScreen()),
+            );
+
+            // Nếu có kết quả trả về (LatLng) thì gọi loadData theo toạ độ đó
+            if (result != null && result is LatLng) {
+              _loadData(lat: result.latitude, lon: result.longitude);
+            }
+          },
+          icon: const Icon(Icons.map, color: Colors.white, size: 30), // Icon bản đồ
+        )
       ],
     );
   }
