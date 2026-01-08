@@ -13,10 +13,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _weatherService = WeatherService();
 
-  // Danh sách chứa TẤT CẢ các ngày (Hôm nay + Dự báo)
+  // Dữ liệu thời tiết
   List<WeatherModel> _allDays = [];
   bool _isLoading = true;
   String _errorMessage = '';
+
+  // BIẾN QUAN TRỌNG: Kiểm soát xem đang ở View 1 hay View 2
+  // false = Xem View 1 ngày (Hôm nay)
+  // true  = Xem View List (Dự báo nhiều ngày)
+  bool _showForecastView = false;
 
   @override
   void initState() {
@@ -31,19 +36,15 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      // 1. Lấy thời tiết hiện tại
       final current = await _weatherService.getWeather();
-      // 2. Lấy dự báo 5 ngày
       final forecast = await _weatherService.getForecast();
 
-      // 3. Gộp lại: Phần tử đầu là Hôm nay, các phần tử sau là dự báo
-      // Sửa lại thuộc tính time cho 'current' để hiển thị đúng ngày
       final currentWithTime = WeatherModel(
         cityName: current.cityName,
         temperature: current.temperature,
         mainCondition: current.mainCondition,
         iconCode: current.iconCode,
-        time: DateTime.now().toString(), // Gán thời gian hiện tại
+        time: DateTime.now().toString(),
       );
 
       setState(() {
@@ -51,15 +52,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print("Lỗi: $e");
       setState(() {
         _isLoading = false;
-        _errorMessage = "Không tải được dữ liệu.\nKiểm tra GPS hoặc API Key.";
+        _errorMessage = "Không tải được dữ liệu.\nKiểm tra kết nối hoặc API Key.";
       });
     }
   }
 
-  // Hàm chọn màu nền (Giữ nguyên)
   LinearGradient _getBackgroundGradient(String? condition) {
     List<Color> colors;
     switch (condition?.toLowerCase()) {
@@ -69,121 +68,221 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'haze':
       case 'dust':
       case 'fog':
-        colors = [Colors.blueGrey.shade400, Colors.blueGrey.shade900];
+        colors = [const Color(0xFF546E7A), const Color(0xFF263238)];
         break;
       case 'rain':
       case 'drizzle':
       case 'shower rain':
-        colors = [Colors.grey.shade700, Colors.black87];
-        break;
       case 'thunderstorm':
-        colors = [Colors.deepPurple.shade900, Colors.black];
+        colors = [const Color(0xFF424242), const Color(0xFF212121)];
         break;
       case 'clear':
-        colors = [Colors.orange.shade400, Colors.orangeAccent.shade700];
+        colors = [const Color(0xFF29B6F6), const Color(0xFF0277BD)];
         break;
       default:
-        colors = [Colors.blue.shade400, Colors.blue.shade900];
+        colors = [const Color(0xFF4FC3F7), const Color(0xFF0288D1)];
     }
     return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
       colors: colors,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    String condition = _allDays.isNotEmpty ? _allDays[0].mainCondition : 'clear';
+    String cityName = _allDays.isNotEmpty ? _allDays[0].cityName : 'Loading...';
+
     return Scaffold(
-      // Nếu chưa có dữ liệu thì dùng màu mặc định, có rồi thì dùng màu của ngày ĐẦU TIÊN trong list
       body: Container(
-        decoration: BoxDecoration(
-          gradient: _getBackgroundGradient(
-              _allDays.isNotEmpty ? _allDays[0].mainCondition : 'clear'
+        decoration: BoxDecoration(gradient: _getBackgroundGradient(condition)),
+        child: SafeArea(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.white))
+              : _errorMessage.isNotEmpty
+              ? Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.white)))
+              : Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Header luôn hiển thị
+                _buildHeader(cityName),
+                const SizedBox(height: 30),
+
+                // 2. Logic chuyển đổi View
+                Expanded(
+                  child: _showForecastView
+                      ? _buildForecastView() // Nếu true -> Hiện List
+                      : _buildTodayView(),   // Nếu false -> Hiện 1 ngày
+                ),
+              ],
+            ),
           ),
-        ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : _errorMessage.isNotEmpty
-            ? Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_errorMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 18)),
-              ElevatedButton(onPressed: _loadData, child: const Text("Thử lại"))
-            ],
-          ),
-        )
-            : PageView.builder( // <--- CÁI NÀY LÀ CÁI BẠN CẦN: VUỐT NGANG
-          itemCount: _allDays.length,
-          itemBuilder: (context, index) {
-            return _buildWeatherPage(_allDays[index], index);
-          },
         ),
       ),
     );
   }
 
-  Widget _buildWeatherPage(WeatherModel weather, int index) {
-    // Xử lý ngày hiển thị
-    DateTime date = DateTime.parse(weather.time!);
-    String dayTitle;
-    if (index == 0) {
-      dayTitle = "Hôm nay (Today)";
-    } else if (index == 1) {
-      dayTitle = "Ngày mai (Tomorrow)";
-    } else {
-      dayTitle = DateFormat('EEEE, d MMMM').format(date);
-    }
+  Widget _buildHeader(String cityName) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.location_on, color: Colors.white, size: 16),
+                SizedBox(width: 4),
+                Text("Location", style: TextStyle(color: Colors.white70, fontSize: 14)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(cityName, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        IconButton(onPressed: () {}, icon: const Icon(Icons.settings, color: Colors.white))
+      ],
+    );
+  }
+
+  // --- VIEW 1: XEM 1 NGÀY (TODAY) ---
+  Widget _buildTodayView() {
+    final today = _allDays[0];
+    DateTime date = DateTime.parse(today.time!);
+    String formattedDate = DateFormat('EEEE, d MMMM').format(date);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Tiêu đề ngày
-        Text(
-          dayTitle,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-
-        // Tên thành phố (Chỉ hiện cho ngày hôm nay, các ngày sau ẩn đi hoặc hiện nhỏ cũng được)
-        if (index == 0)
-          Text(
-            weather.cityName,
-            style: const TextStyle(fontSize: 20, color: Colors.white70),
-          ),
-
-        const SizedBox(height: 40),
-
-        // Icon
+        // Ảnh to đùng
         Image.network(
-          'https://openweathermap.org/img/wn/${weather.iconCode}@4x.png',
-          scale: 0.6,
+          'https://openweathermap.org/img/wn/${today.iconCode}@4x.png',
+          scale: 0.5,
         ),
-
-        // Nhiệt độ
+        // Nhiệt độ to
         Text(
-          '${weather.temperature.round()}°',
-          style: const TextStyle(fontSize: 90, fontWeight: FontWeight.bold, color: Colors.white),
+          '${today.temperature.round()}°',
+          style: const TextStyle(fontSize: 100, fontWeight: FontWeight.bold, color: Colors.white),
         ),
-
-        // Trạng thái
         Text(
-          weather.mainCondition,
-          style: const TextStyle(fontSize: 30, color: Colors.white70, fontWeight: FontWeight.w300),
+          today.mainCondition,
+          style: const TextStyle(fontSize: 24, color: Colors.white70),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          formattedDate,
+          style: const TextStyle(color: Colors.white60, fontSize: 16),
         ),
 
-        const SizedBox(height: 50),
+        const Spacer(), // Đẩy nút xuống dưới cùng
 
-        // Chỉ dẫn vuốt
-        if (index < _allDays.length - 1)
-          const Column(
+        // Nút chuyển sang View Forecast
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _showForecastView = true; // Bấm vào thì chuyển sang View 2
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))]
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Forecast report",
+                  style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                SizedBox(width: 10),
+                Icon(Icons.arrow_upward, color: Colors.blue),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  // --- VIEW 2: XEM LIST (FORECAST) ---
+  Widget _buildForecastView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Nút Back nhỏ để quay về View 1
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _showForecastView = false; // Quay về View 1
+            });
+          },
+          child: const Row(
             children: [
-              Text("Vuốt sang trái để xem ngày mai", style: TextStyle(color: Colors.white38, fontSize: 12)),
-              Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 16),
+              Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+              SizedBox(width: 5),
+              Text("Back to Today", style: TextStyle(color: Colors.white70)),
             ],
           ),
+        ),
+        const SizedBox(height: 20),
+
+        const Text(
+          "Next Forecast",
+          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 20),
+
+        // Danh sách cuộn
+        Expanded(
+          child: ListView.builder(
+            itemCount: _allDays.length, // Hiện cả hôm nay và các ngày sau
+            itemBuilder: (context, index) {
+              final day = _allDays[index];
+              DateTime date = DateTime.parse(day.time!);
+              String dayName = index == 0 ? "Today" : DateFormat('EEEE').format(date);
+              String shortDate = DateFormat('dd/MM').format(date);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1), // Trong suốt
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SizedBox(
+                      width: 100,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(dayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text(shortDate, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Image.network(
+                      'https://openweathermap.org/img/wn/${day.iconCode}.png',
+                      width: 40,
+                    ),
+                    Text(
+                      '${day.temperature.round()}°',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
