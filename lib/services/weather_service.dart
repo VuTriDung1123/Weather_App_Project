@@ -19,6 +19,7 @@ class WeatherService {
     } else {
       throw Exception('Lỗi tải thời tiết hiện tại');
     }
+
   }
 
   // MỚI: Lấy dự báo 5 ngày (API trả về mỗi 3 giờ 1 lần -> Ta sẽ lọc lấy 1 cái mỗi ngày)
