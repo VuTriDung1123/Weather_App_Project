@@ -18,7 +18,7 @@ class WeatherModel {
       cityName: json['name'] ?? '',
       temperature: (json['main']['temp'] as num).toDouble(),
       mainCondition: json['weather'][0]['main'] ?? '',
-      iconCode: json['weather'][0]['icon'] ?? '10d',
+      iconCode: json['weather'][0]['icons'] ?? '10d',
       time: json['dt_txt'], // Lấy thời gian nếu có
     );
   }
