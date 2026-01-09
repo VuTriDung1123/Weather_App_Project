@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
 import '../utils/asset_helper.dart';
+import '../utils/home_widget_utils.dart';
 import 'location_list_screen.dart'; // Màn hình list mới
 import 'map_screen.dart';
 
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final rawForecast = await _weatherService.getForecast(lat: lat, lon: lon);
       _processData(current, rawForecast);
       setState(() { _isLoading = false; _showForecastView = false; _currentIndex = 0; });
+      HomeWidgetUtils.updateWidget(current);
     } catch (e) {
       setState(() { _isLoading = false; _errorMessage = "Lỗi kết nối hoặc API Key."; });
     }
